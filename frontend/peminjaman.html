@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Peminjaman</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900 text-sm font-sans">
+  <div id="nav"></div>
+  <div class="px-5 pt-3 pb-8">
+    <h2 class="text-2xl font-bold mt-2">Peminjaman</h2>
+    <p class="text-gray-600 mb-3">Daftar peminjam dan status peminjaman</p>
+
+    <div class="flex flex-wrap gap-2.5 mb-3">
+      <div class="bg-white border border-gray-400 px-3.5 py-2 min-w-[110px]">Dipinjam<b id="cDipinjam" class="block text-xl">0</b></div>
+      <div class="bg-white border border-gray-400 px-3.5 py-2 min-w-[110px]">Terlambat<b id="cTerlambat" class="block text-xl">0</b></div>
+      <div class="bg-white border border-gray-400 px-3.5 py-2 min-w-[110px]">Dikembalikan<b id="cKembali" class="block text-xl">0</b></div>
+    </div>
+
+    <div class="flex flex-wrap gap-2 mb-2.5">
+      <input id="cari" class="flex-1 min-w-[180px] border border-gray-500 bg-white px-2 py-1.5" placeholder="Cari nama peminjam, kelas, atau alat">
+      <select id="filter" class="border border-gray-500 bg-white px-2 py-1.5">
+        <option value="">Semua status</option><option>Dipinjam</option><option>Terlambat</option><option>Dikembalikan</option>
+      </select>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse bg-white">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p class="text-gray-500 text-xs mt-1.5">Tgl Kembali: batas pengembalian untuk yang masih dipinjam, tanggal pengembalian sebenarnya untuk yang sudah dikembalikan.</p>
+  </div>
+
+<script src="js/app.js"></script>
+  <script>
+    renderNav('peminjaman');
+    const $ = id => document.getElementById(id);
+    let semua = [];
+
+    $('thead').innerHTML = ['No', 'Peminjam', 'Kelas', 'Alat', 'Jumlah', 'Tgl Pinjam', 'Tgl Kembali', 'Status', 'Aksi']
+      .map(h => `<th class="${TH}">${h}</th>`).join('');
+
+    function render() {
+      $('cDipinjam').textContent = semua.filter(p => p.st === 'Dipinjam').length;
+      $('cTerlambat').textContent = semua.filter(p => p.st === 'Terlambat').length;
+      $('cKembali').textContent = semua.filter(p => p.st === 'Dikembalikan').length;
+
+      const q = $('cari').value.trim().toLowerCase(), f = $('filter').value;
+      const data = semua.filter(p => (!f || p.st === f) &&
+        (!q || [p.nama_peminjam, p.kelas, p.nama_alat].some(v => String(v).toLowerCase().includes(q)))).reverse();
+
+      $('tbody').innerHTML = data.length ? data.map((p, i) => `<tr class="even:bg-gray-50">
+        <td class="${TD}">${i + 1}</td>
+        <td class="${TD}">${esc(p.nama_peminjam)}</td>
+        <td class="${TD}">${esc(p.kelas)}</td>
+        <td class="${TD}">${esc(p.nama_alat)}</td>
+        <td class="${TD}">${p.jumlah}</td>
+        <td class="${TD}">${fmtTgl(p.tanggal_pinjam)}</td>
+        <td class="${TD}">${fmtTgl(p.tanggal_kembali)}</td>
+        <td class="${TD}">${badge(p.st)}</td>
+        <td class="${TD} whitespace-nowrap">
+          ${p.st !== 'Dikembalikan' ? `<button data-kembali="${p.id_peminjaman}" class="${btn('biru', true)}">Kembalikan</button>` : ''}
+          <button data-hapus="${p.id_peminjaman}" class="${btn('merah', true)}">Hapus</button>
+        </td></tr>`).join('')
+        : `<tr><td colspan="9" class="${TD} text-center text-gray-500 py-4">Belum ada data peminjaman.</td></tr>`;
+    }
+
+    async function muat() {
+      try {
+        const [pinjam, alat] = await Promise.all([api('/peminjaman'), api('/alat')]);
+        const nama = Object.fromEntries(alat.map(a => [a.id_alat, a.nama_alat]));
+        semua = pinjam.map(p => ({ ...p, nama_alat: nama[p.id_alat] || '-', st: statusPinjam(p) }));
+        render();
+      } catch (e) { notif(e.message); }
+    }
+
+    $('tbody').onclick = async e => {
+      const { kembali, hapus } = e.target.dataset;
+      try {
+        if (kembali && confirm('Alat ini sudah dikembalikan?')) {
+          await api('/peminjaman/' + kembali, 'PATCH'); notif('Alat berhasil dikembalikan.', true); muat();
+        }
+        if (hapus && confirm('Yakin hapus data peminjaman ini?')) {
+          await api('/peminjaman/' + hapus, 'DELETE'); notif('Data peminjaman berhasil dihapus.', true); muat();
+        }
+      } catch (err) { notif(err.message); }
+    };
+    $('cari').oninput = render; $('filter').onchange = render;
+    muat();
+  </script>
+</body>
+</html>

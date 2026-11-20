@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kategori</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900 text-sm font-sans">
+  <div id="nav"></div>
+  <div class="px-5 pt-3 pb-8">
+    <h2 class="text-2xl font-bold mt-2">Kategori Alat</h2>
+    <p class="text-gray-600 mb-3">Kelompokkan alat agar mudah dicari</p>
+
+    <h3 id="judulForm" class="text-base font-bold mt-5 mb-1.5">Tambah Kategori</h3>
+    <div class="bg-white border border-gray-400 p-3">
+      <div class="grid md:grid-cols-2 gap-x-4 gap-y-2.5">
+        <div><label class="block font-bold mb-1" for="nama">Nama Kategori</label>
+          <input id="nama" class="w-full border border-gray-500 bg-white px-2 py-1.5" placeholder="Contoh: Multimedia"></div>
+        <div><label class="block font-bold mb-1" for="deskripsi">Deskripsi</label>
+          <input id="deskripsi" class="w-full border border-gray-500 bg-white px-2 py-1.5" placeholder="Deskripsi kategori"></div>
+        <div class="flex items-end gap-1.5">
+          <button id="btnTambah" class="bg-blue-600 hover:bg-blue-700 text-white border border-blue-800 rounded-sm px-3 py-1.5">+ Tambah Kategori</button>
+          <button id="btnReset" class="bg-gray-500 hover:bg-gray-600 text-white border border-gray-700 rounded-sm px-3 py-1.5">Reset</button>
+        </div>
+      </div>
+      <p id="error" class="text-red-600 mt-1.5"></p>
+    </div>
+
+    <h3 class="text-base font-bold mt-5 mb-1.5">Data Kategori</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse bg-white">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script src="js/app.js"></script>
+  <script>
+    renderNav('kategori');
+    const $ = id => document.getElementById(id);
+    let editId = null, dataKat = [], dataAlat = [];
+
+    $('thead').innerHTML = ['No', 'Nama Kategori', 'Deskripsi', 'Jumlah Alat', 'Aksi']
+      .map(h => `<th class="${TH}">${h}</th>`).join('');
+
+    async function muat() {
+      try {
+        [dataKat, dataAlat] = await Promise.all([api('/kategori_alat'), api('/alat')]);
+        $('tbody').innerHTML = dataKat.length ? dataKat.map((k, i) => `<tr class="even:bg-gray-50">
+          <td class="${TD}">${i + 1}</td>
+          <td class="${TD}">${esc(k.nama_kategori)}</td>
+          <td class="${TD}">${esc(k.deskripsi) || '-'}</td>
+          <td class="${TD}">${dataAlat.filter(a => a.id_kategori === k.id_kategori).length}</td>
+          <td class="${TD} whitespace-nowrap">
+            <button data-edit="${k.id_kategori}" class="${btn('biru', true)}">Ubah</button>
+            <button data-hapus="${k.id_kategori}" class="${btn('merah', true)}">Hapus</button>
+          </td></tr>`).join('')
+          : `<tr><td colspan="5" class="${TD} text-center text-gray-500 py-4">Belum ada data kategori.</td></tr>`;
+      } catch (e) { notif(e.message); }
+    }
+
+    function resetForm() {
+      editId = null; $('nama').value = ''; $('deskripsi').value = ''; $('error').textContent = '';
+      $('btnTambah').textContent = '+ Tambah Kategori'; $('judulForm').textContent = 'Tambah Kategori';
+    }
+
+    $('btnTambah').onclick = async () => {
+      const nama_kategori = $('nama').value.trim(), deskripsi = $('deskripsi').value.trim();
+      if (!nama_kategori) { $('error').textContent = 'Nama kategori harus diisi.'; return; }
+      try {
+        if (editId) await api('/kategori_alat/' + editId, 'PATCH', { nama_kategori, deskripsi });
+        else await api('/kategori_alat', 'POST', { nama_kategori, deskripsi });
+        notif(editId ? 'Kategori berhasil diubah.' : 'Kategori berhasil ditambahkan.', true);
+        resetForm(); muat();
+      } catch (e) { $('error').textContent = e.message; }
+    };
+    $('btnReset').onclick = resetForm;
+
+    $('tbody').onclick = async e => {
+      const { edit, hapus } = e.target.dataset;
+      if (edit) {
+        const k = dataKat.find(x => x.id_kategori == edit);
+        editId = k.id_kategori; $('nama').value = k.nama_kategori; $('deskripsi').value = k.deskripsi || '';
+        $('btnTambah').textContent = 'Simpan Perubahan'; $('judulForm').textContent = 'Ubah Kategori'; $('nama').focus();
+      }
+      if (hapus) {
+        const n = dataAlat.filter(a => a.id_kategori == hapus).length;
+        const pesan = n ? `Kategori ini punya ${n} alat. Jika dihapus, semua alatnya ikut terhapus. Lanjutkan?` : 'Yakin hapus kategori ini?';
+        if (!confirm(pesan)) return;
+        try { await api('/kategori_alat/' + hapus, 'DELETE'); notif('Kategori berhasil dihapus.', true); muat(); }
+        catch { notif('Gagal menghapus: ada alat di kategori ini yang masih punya riwayat peminjaman.'); }
+      }
+    };
+    muat();
+  </script>
+</body>
+</html>
